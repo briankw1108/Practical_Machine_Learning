@@ -1,0 +1,84 @@
+---
+title: "Practical Machine Learning Project"
+author: "Brian Wang"
+date: "February 20, 2016"
+output: html_document
+---
+
+Goal of this project
+----------------------
+The goal of this project is to find the model to predict how well 6 subjects or participants do barbell lifts using data measured by accelerometers on the belt, forearm, arm, and dumbell. 
+
+The raw data is provided by Velloso, E.; Bulling, A.; Gellersen, H.; Ugulino, W.; Fuks, H. More information can be found at http://groupware.les.inf.puc-rio.br/har#ixzz4133xZNka.
+
+**1. Load and Preprocess Datasets**
+```{r}
+#Load packages and datasets
+suppressMessages(library(caret)); suppressMessages(library(ggplot2)); suppressMessages(library(rattle))
+suppressMessages(library(rpart)); suppressMessages(library(randomForest))
+
+#Load datasets
+trainURL = "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+testURL = "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+training = read.csv(file = trainURL, header = T, na.strings = c("NA", "", "#DIV/0!"))
+testing = read.csv(file = testURL, header = T, na.strings = c("NA", "", "#DIV/0!"))
+
+#Preview the dataset
+str(training)
+
+#Remove variables that has zero variance
+newtrain = training[ , -nearZeroVar(training)]
+
+#Remove columns that contain majority of NAs.
+index = vector()
+for (i in 1:ncol(newtrain)) {
+        if (sum(is.na(newtrain[, i])) / nrow(newtrain) > 0.6) {
+                index = c(index, i)
+        }
+}
+newtrain = newtrain[, -index]
+
+#Create data petition on training dataset.
+set.seed(1)
+inTrain = createDataPartition(newtrain$classe, p = 0.7, list = FALSE)
+mytrain = newtrain[inTrain, ]
+mytest = newtrain[-inTrain, ]
+```
+
+**2. Cleaning the Data**
+
+Try to preview some of the variables left to see if they have possible correlation with the outcome. If not, then we could remove those variables in the dataset.
+
+And from the scatter plots, variable X and num_window and all variables related to time do not show any possible correlation with outcome, so we can remove them.
+```{r}
+#Exploratory data analysis on some of the variable to verify if they have possible correlation with outcome.
+par(mfrow = c(2, 2))
+plot(x = mytrain$X, y = mytrain$classe); plot(x = mytrain$raw_timestamp_part_1, y = mytrain$classe)
+plot(x = mytrain$raw_timestamp_part_2, y = mytrain$classe); plot(x = mytrain$num_window, y = mytrain$classe)
+
+#Remove variables that have no influence on outcome.
+mytrain = mytrain[ , -match(c("X", "raw_timestamp_part_1", "raw_timestamp_part_2", "cvtd_timestamp", "num_window"), names(mytrain))]
+```
+
+**3. Model Fitting**
+
+*CART*
+```{r}
+fit = train(classe ~ . , data = mytrain, method = "rpart")
+fancyRpartPlot(fit$finalModel)
+confusionMatrix(mytest$classe, predict(fit, newdata = mytest))
+```
+
+*Random Forest*
+```{r}
+fit2 = randomForest(classe ~ . , data = mytrain)
+confusionMatrix(mytest$classe, predict(fit2, newdata = mytest))
+```
+
+**4. Predict Testing Dataset**
+
+Since the overall accuracy on the testing dataset is a lot higher than the method of CART, so I use the algorithem of random forest with out of sample error rate 1 - 0.9563 = 0.0437.
+And the answers for the final assignment are shown below
+```{r}
+predict(fit2, newdata = testing)
+```
